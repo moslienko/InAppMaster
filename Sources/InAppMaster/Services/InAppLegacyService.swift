@@ -22,10 +22,13 @@ final public class InAppLegacyService: NSObject {
         set { productsFetchQueue.async(flags: .barrier) { self._iapProducts = newValue } }
     }
     
+    private var restoredProductIDs: [String] = []
+    
     // MARK: - Callbacks
     public var productDidSuccessPurchased: ((String) -> Void)?
-    public var productDidSuccessRestored: ((String) -> Void)?
     public var productDidFailedPurchased: ((Error) -> Void)?
+    public var productDidSuccessRestored: (([String]) -> Void)?
+    public var productDidFailedRestored: ((Error) -> Void)?
     public var productsInfoRequestDidFinished: (([SKProduct]) -> Void)?
     
     // MARK: - Init
@@ -93,6 +96,7 @@ final public class InAppLegacyService: NSObject {
             }
             return
         }
+        self.restoredProductIDs = []
         
         SKPaymentQueue.default().restoreCompletedTransactions()
     }
@@ -157,10 +161,8 @@ extension InAppLegacyService: SKProductsRequestDelegate, SKPaymentTransactionObs
             case  .restored:
                 SKPaymentQueue.default().finishTransaction(transaction)
                 
-                print("successfully restored")
-                DispatchQueue.main.async {
-                    self.productDidSuccessRestored?(productId)
-                }
+                print("restored \(productId)")
+                self.restoredProductIDs.append(productId)
             case .failed:
                 print("failed - \(transaction.error)")
                 SKPaymentQueue.default().finishTransaction(transaction)
@@ -178,16 +180,23 @@ extension InAppLegacyService: SKProductsRequestDelegate, SKPaymentTransactionObs
     }
     
     public func paymentQueueRestoreCompletedTransactionsFinished(_ queue: SKPaymentQueue) {
-        if queue.transactions.isEmpty {
-            DispatchQueue.main.async {
-                self.productDidFailedPurchased?(InAppStoreKitError.failedRestore)
+        let ids = self.restoredProductIDs
+        self.restoredProductIDs = []
+        
+        DispatchQueue.main.async {
+            if ids.isEmpty {
+                self.productDidFailedRestored?(InAppStoreKitError.failedRestore)
+            } else {
+                self.productDidSuccessRestored?(ids)
             }
         }
     }
     
     public func paymentQueue(_ queue: SKPaymentQueue, restoreCompletedTransactionsFailedWithError error: Error) {
+        self.restoredProductIDs = []
+        
         DispatchQueue.main.async {
-            self.productDidFailedPurchased?(error)
+            self.productDidFailedRestored?(error)
         }
     }
     

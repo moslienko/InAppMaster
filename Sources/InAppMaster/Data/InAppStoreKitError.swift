@@ -13,5 +13,6 @@ public enum InAppStoreKitError: Error {
     case productsListEmpty
     case productsNotFetched
     case userCantMakePayments
+    case receiptNotFoundNeedRefresh
     case unknown
 }
