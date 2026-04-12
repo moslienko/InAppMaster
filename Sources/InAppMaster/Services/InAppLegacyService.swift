@@ -1,5 +1,5 @@
 //
-//  InAppService.swift
+//  InAppLegacyService.swift
 //  InAppMaster
 //
 //  Created by Pavel Moslienko on 11.04.2026.
@@ -25,7 +25,7 @@ final public class InAppLegacyService: NSObject {
     // MARK: - Callbacks
     public var productDidSuccessPurchased: ((String) -> Void)?
     public var productDidSuccessRestored: ((String) -> Void)?
-    public var productDidFailedPurchased: ((Error?) -> Void)?
+    public var productDidFailedPurchased: ((Error) -> Void)?
     public var productsInfoRequestDidFinished: (([SKProduct]) -> Void)?
     
     // MARK: - Init
@@ -89,7 +89,7 @@ final public class InAppLegacyService: NSObject {
     public func restorePurchase() {
         guard canMakePurchases() else {
             DispatchQueue.main.async {
-                self.productDidFailedPurchased?(nil)
+                self.productDidFailedPurchased?(InAppStoreKitError.userCantMakePayments)
             }
             return
         }
@@ -165,7 +165,7 @@ extension InAppLegacyService: SKProductsRequestDelegate, SKPaymentTransactionObs
                 print("failed - \(transaction.error)")
                 SKPaymentQueue.default().finishTransaction(transaction)
                 DispatchQueue.main.async {
-                    self.productDidFailedPurchased?(transaction.error)
+                    self.productDidFailedPurchased?(transaction.error ?? InAppStoreKitError.unknown)
                 }
             case .deferred:  // Ask to Buy
                 DispatchQueue.main.async {
@@ -180,7 +180,7 @@ extension InAppLegacyService: SKProductsRequestDelegate, SKPaymentTransactionObs
     public func paymentQueueRestoreCompletedTransactionsFinished(_ queue: SKPaymentQueue) {
         if queue.transactions.isEmpty {
             DispatchQueue.main.async {
-                self.productDidFailedPurchased?(nil)
+                self.productDidFailedPurchased?(InAppStoreKitError.failedRestore)
             }
         }
     }
