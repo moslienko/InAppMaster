@@ -125,4 +125,34 @@ final public class InAppModernService {
     public func getProduct(id: String) -> Product? {
         iapProducts.first(where: { $0.id == id })
     }
+    
+    /**
+     Обновить данные чека
+     **/
+    public func refreshReceiptIfNeeded() async throws {
+        guard let receiptURL = Bundle.main.appStoreReceiptURL else {
+            try await InAppRefreshReceiptService.shared.refreshReceipt()
+            return
+        }
+        
+        if !FileManager.default.fileExists(atPath: receiptURL.path) {
+            try await InAppRefreshReceiptService.shared.refreshReceipt()
+        }
+    }
+    
+    /**
+     Получить активную подписку как JWS
+     **/
+    public func getCurrentActiveSubscriptionJWS() async -> String? {
+        for await result in Transaction.currentEntitlements {
+            if case .verified(let transaction) = result {
+                if transaction.revocationDate == nil &&
+                    (transaction.expirationDate == nil || transaction.expirationDate! > Date()) {
+                    let jwsData = transaction.jsonRepresentation
+                    return String(data: jwsData, encoding: .utf8)
+                }
+            }
+        }
+        return nil
+    }
 }
