@@ -7,10 +7,10 @@
 
 import StoreKit
 
-final public class InAppService: NSObject {
+final public class InAppLegacyService: NSObject {
     
     // MARK: - Params
-    static public let shared = InAppService()
+    static public let shared = InAppLegacyService()
     
     private var productsRequest = SKProductsRequest()
     private let productsFetchQueue = DispatchQueue(label: "com.InAppMaster.products", attributes: .concurrent)
@@ -122,7 +122,7 @@ final public class InAppService: NSObject {
     }
 }
 
-extension InAppService: SKProductsRequestDelegate, SKPaymentTransactionObserver {
+extension InAppLegacyService: SKProductsRequestDelegate, SKPaymentTransactionObserver {
     /**
      Получение доступных продуктов для покупки
      **/
