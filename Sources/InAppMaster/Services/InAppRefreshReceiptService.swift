@@ -14,6 +14,7 @@ final public class InAppRefreshReceiptService: NSObject {
     static public let shared = InAppRefreshReceiptService()
 
     private var receiptRefreshContinuation: CheckedContinuation<Void, Error>?
+    private var receiptRefreshRequest: SKReceiptRefreshRequest?
 
     // MARK: - Init
     private override init() {}
@@ -31,6 +32,7 @@ final public class InAppRefreshReceiptService: NSObject {
 
             let request = SKReceiptRefreshRequest(receiptProperties: nil)
             request.delegate = self
+            self.receiptRefreshRequest = request
             request.start()
         }
     }
@@ -44,6 +46,7 @@ extension InAppRefreshReceiptService: SKRequestDelegate {
     public func requestDidFinish(_ request: SKRequest) {
         receiptRefreshContinuation?.resume()
         receiptRefreshContinuation = nil
+        receiptRefreshRequest = nil
     }
 
     /// Called when the receipt refresh request fails.
@@ -53,5 +56,6 @@ extension InAppRefreshReceiptService: SKRequestDelegate {
     public func request(_ request: SKRequest, didFailWithError error: Error) {
         receiptRefreshContinuation?.resume(throwing: error)
         receiptRefreshContinuation = nil
+        receiptRefreshRequest = nil
     }
 }
