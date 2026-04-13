@@ -7,6 +7,7 @@
 
 import StoreKit
 
+/// StoreKit 2 (iOS 15+)
 @available(iOS 15.0, *)
 @MainActor
 final public class InAppModernService {
@@ -39,20 +40,18 @@ final public class InAppModernService {
         }
     }
     
-    /**
-     Инициализация
-     - Parameter productIdentifiers: Массив идентификаторов продукта
-     **/
+    // MARK: - Methods
+    
+    /// Configures the service with the given product identifiers.
+    /// - Parameter productIdentifiers: The array of product identifiers to be loaded.
     public func configure(productIdentifiers: [String]) {
         self.productIdentifiers = Set(productIdentifiers)
         self.iapProducts = []
         
     }
     
-    /**
-     Покупка
-     - Parameter id: Идентификатор продукта
-     **/
+    /// Initiates a purchase for the product.
+    /// - Parameter id: The identifier of the product to be purchased.
     public func purchaseMyProduct(id: String) async throws {
         guard !iapProducts.isEmpty else {
             throw InAppStoreKitError.productsNotFetched
@@ -61,7 +60,6 @@ final public class InAppModernService {
             throw InAppStoreKitError.unknownProductId
         }
         
-        print("try puchase \(product.id)")
         let result = try await product.purchase()
         
         switch result {
@@ -82,9 +80,8 @@ final public class InAppModernService {
         }
     }
     
-    /**
-     Восстановление покупки
-     **/
+    /// Restores previously purchased products.
+    /// - Returns: A set of product identifiers for currently active purchases.
     public func restorePurchase() async throws -> Set<String> {
         var purchasedProductIDs: Set<String> = []
         
@@ -103,9 +100,8 @@ final public class InAppModernService {
         return purchasedProductIDs
     }
     
-    /**
-     Запрос к доступным продуктам
-     **/
+    /// Fetches the available in-app products from the App Store.
+    /// - Returns: An array of products matching the configured identifiers.
     public func fetchAvailableProducts() async throws -> [any InAppProductProtocol] {
         guard !productIdentifiers.isEmpty else {
             throw InAppStoreKitError.productsListEmpty
@@ -117,18 +113,14 @@ final public class InAppModernService {
         return products
     }
     
-    /**
-     Получить продукт
-     - Parameter id: Идентификатор продукта
-     - Returns: App Store продукт
-     **/
+    /// Returns the App Store product.
+    /// - Parameter id: The identifier of the product.
+    /// - Returns: The matching App Store product, or `nil` if not found.
     public func getProduct(id: String) -> Product? {
         iapProducts.first(where: { $0.id == id })
     }
     
-    /**
-     Обновить данные чека
-     **/
+    /// Refreshes the App Store receipt if it is missing from the bundle.
     public func refreshReceiptIfNeeded() async throws {
         guard let receiptURL = Bundle.main.appStoreReceiptURL else {
             try await InAppRefreshReceiptService.shared.refreshReceipt()
@@ -140,9 +132,8 @@ final public class InAppModernService {
         }
     }
     
-    /**
-     Получить активную подписку как JWS
-     **/
+    /// Returns the JWS representation of the currently active subscription.
+    /// - Returns: The JWS string of the active subscription, or `nil` if none is active.
     public func getCurrentActiveSubscriptionJWS() async -> String? {
         for await result in Transaction.currentEntitlements {
             if case .verified(let transaction) = result,
