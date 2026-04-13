@@ -9,23 +9,23 @@ import StoreKit
 
 /// StoreKit 1 (iOS 13-14)
 final public class InAppLegacyService: NSObject {
-
+    
     // MARK: - Params
     static public let shared = InAppLegacyService()
-
+    
     private var productsRequest = SKProductsRequest()
     private let productsFetchQueue = DispatchQueue(
         label: "com.InAppMaster.products", attributes: .concurrent)
     private var _iapProducts = [SKProduct]()
-
+    
     public private(set) var productIdentifiers: Set<String> = []
     public var iapProducts: [SKProduct] {
         get { productsFetchQueue.sync { _iapProducts } }
         set { productsFetchQueue.async(flags: .barrier) { self._iapProducts = newValue } }
     }
-
+    
     private var restoredProductIDs: [String] = []
-
+    
     // MARK: - Callbacks
     public var productDidSuccessPurchased: ((String) -> Void)?
     public var productDidFailedPurchased: ((Error) -> Void)?
@@ -33,28 +33,28 @@ final public class InAppLegacyService: NSObject {
     public var productDidFailedRestored: ((Error) -> Void)?
     public var productsFetchDidFailed: ((Error) -> Void)?
     public var productsInfoRequestDidFinished: (([any InAppProductProtocol]) -> Void)?
-
+    
     // MARK: - Init
     private override init() {
         super.init()
         SKPaymentQueue.default().add(self)
     }
-
+    
     // MARK: - Methods
-
+    
     /// Configures the service with the given product identifiers.
     /// - Parameter productIdentifiers: The array of product identifiers to be loaded.
     public func configure(productIdentifiers: [String]) {
         self.productIdentifiers = Set(productIdentifiers)
         self.iapProducts = []
     }
-
+    
     /// Indicates whether the user is allowed to make in-app purchases.
     /// - Returns: `true` if the user has enabled in-app purchases, otherwise `false`.
     public func canMakePurchases() -> Bool {
         SKPaymentQueue.canMakePayments()
     }
-
+    
     /// Initiates a purchase for the product with the given identifier.
     /// - Parameter id: The identifier of the product to be purchased.
     public func purchaseMyProduct(id: String) {
@@ -70,18 +70,18 @@ final public class InAppLegacyService: NSObject {
             }
             return
         }
-
+        
         guard canMakePurchases() else {
             DispatchQueue.main.async {
                 self.productDidFailedPurchased?(InAppStoreKitError.userCantMakePayments)
             }
             return
         }
-
+        
         let payment = SKPayment(product: product)
         SKPaymentQueue.default().add(payment)
     }
-
+    
     /// Restores previously completed purchases.
     public func restorePurchase() {
         guard canMakePurchases() else {
@@ -91,10 +91,10 @@ final public class InAppLegacyService: NSObject {
             return
         }
         self.restoredProductIDs = []
-
+        
         SKPaymentQueue.default().restoreCompletedTransactions()
     }
-
+    
     /// Fetch the available products info.
     public func fetchAvailableProducts() {
         productsRequest.cancel()
@@ -102,7 +102,7 @@ final public class InAppLegacyService: NSObject {
         productsRequest.delegate = self
         productsRequest.start()
     }
-
+    
     /// Returns information about a product available for purchase.
     /// - Parameter id: The identifier of the product.
     /// - Returns: A tuple with the localized title, price and currency symbol, or `nil` if the product is not found.
@@ -112,7 +112,7 @@ final public class InAppLegacyService: NSObject {
         guard let product = iapProducts.first(where: { $0.productIdentifier == id }) else {
             return nil
         }
-
+        
         return (
             name: product.localizedTitle, price: product.price,
             currency: product.priceLocale.currencySymbol ?? "$"
@@ -128,15 +128,18 @@ extension InAppLegacyService: SKProductsRequestDelegate, SKPaymentTransactionObs
     public func productsRequest(
         _ request: SKProductsRequest, didReceive response: SKProductsResponse
     ) {
-        if response.products.count > 0 {
+        if response.products.isEmpty {
+            DispatchQueue.main.async {
+                self.productsFetchDidFailed?(InAppStoreKitError.productsListEmpty)
+            }
+        } else {
             iapProducts = response.products
-        }
-
-        DispatchQueue.main.async {
-            self.productsInfoRequestDidFinished?(response.products)
+            DispatchQueue.main.async {
+                self.productsInfoRequestDidFinished?(response.products)
+            }
         }
     }
-
+    
     /// Handles updates for transactions in the payment queue.
     /// - Parameters:
     ///   - queue: The payment queue that updated the transactions.
@@ -146,17 +149,17 @@ extension InAppLegacyService: SKProductsRequestDelegate, SKPaymentTransactionObs
     ) {
         transactions.forEach({ transaction in
             let productId = transaction.payment.productIdentifier
-
+            
             switch transaction.transactionState {
             case .purchased:
                 SKPaymentQueue.default().finishTransaction(transaction)
-
+                
                 DispatchQueue.main.async {
                     self.productDidSuccessPurchased?(productId)
                 }
             case .restored:
                 SKPaymentQueue.default().finishTransaction(transaction)
-
+                
                 self.restoredProductIDs.append(productId)
             case .failed:
                 SKPaymentQueue.default().finishTransaction(transaction)
@@ -177,13 +180,13 @@ extension InAppLegacyService: SKProductsRequestDelegate, SKPaymentTransactionObs
             }
         })
     }
-
+    
     /// Called when restoring completed transactions has finished.
     /// - Parameter queue: The payment queue that finished restoring transactions.
     public func paymentQueueRestoreCompletedTransactionsFinished(_ queue: SKPaymentQueue) {
         let ids = self.restoredProductIDs
         self.restoredProductIDs = []
-
+        
         DispatchQueue.main.async {
             if ids.isEmpty {
                 self.productDidFailedRestored?(InAppStoreKitError.failedRestore)
@@ -192,7 +195,7 @@ extension InAppLegacyService: SKProductsRequestDelegate, SKPaymentTransactionObs
             }
         }
     }
-
+    
     /// Called when restoring completed transactions fails.
     /// - Parameters:
     ///   - queue: The payment queue that failed to restore transactions.
@@ -201,12 +204,12 @@ extension InAppLegacyService: SKProductsRequestDelegate, SKPaymentTransactionObs
         _ queue: SKPaymentQueue, restoreCompletedTransactionsFailedWithError error: Error
     ) {
         self.restoredProductIDs = []
-
+        
         DispatchQueue.main.async {
             self.productDidFailedRestored?(error)
         }
     }
-
+    
     /// Determines whether a store-initiated payment should be added to the payment queue.
     /// - Parameters:
     ///   - queue: The payment queue receiving the payment.
@@ -216,7 +219,7 @@ extension InAppLegacyService: SKProductsRequestDelegate, SKPaymentTransactionObs
     public func paymentQueue(_ queue: SKPaymentQueue, shouldAddStorePayment payment: SKPayment, for product: SKProduct) -> Bool {
         true
     }
-
+    
     /// Called when a StoreKit request fails.
     /// - Parameters:
     ///   - request: The request that failed.

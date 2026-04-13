@@ -11,6 +11,7 @@ final public class InAppService {
     
     // MARK: - Params
     static public let shared = InAppService()
+    private var configuredProductIdentifiers: [String] = []
     
     /// iOS 13-14
     public lazy var legacyService = InAppLegacyService.shared
@@ -30,11 +31,9 @@ final public class InAppService {
     /// Configures the in-app purchase service with the given product identifiers.
     /// - Parameter productIdentifiers: The list of product identifiers to be loaded.
     public func configure(productIdentifiers: [String]) {
-        if #available(iOS 15.0, *) {
-            Task {
-                await modernService.configure(productIdentifiers: productIdentifiers)
-            }
-        } else {
+        configuredProductIdentifiers = productIdentifiers
+
+        if #unavailable(iOS 15.0) {
             legacyService.configure(productIdentifiers: productIdentifiers)
         }
     }
@@ -47,7 +46,9 @@ final public class InAppService {
         if #available(iOS 15.0, *) {
             Task {
                 do {
-                    let products = try await modernService.fetchAvailableProducts()
+                    let products = try await modernService.fetchAvailableProducts(
+                        productIdentifiers: self.configuredProductIdentifiers
+                    )
                     await MainActor.run {
                         completion(.success(products))
                     }

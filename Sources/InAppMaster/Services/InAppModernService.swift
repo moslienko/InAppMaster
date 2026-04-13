@@ -15,8 +15,6 @@ final public class InAppModernService {
     // MARK: - Params
     static public let shared = InAppModernService()
     
-    public private(set) var productIdentifiers: Set<String> = []
-    
     private var iapProducts = [Product]()
     private var updatesTask: Task<Void, Never>?
     private var finishedTransactionIDs = Set<UInt64>()
@@ -41,14 +39,6 @@ final public class InAppModernService {
     }
     
     // MARK: - Methods
-    
-    /// Configures the service with the given product identifiers.
-    /// - Parameter productIdentifiers: The array of product identifiers to be loaded.
-    public func configure(productIdentifiers: [String]) {
-        self.productIdentifiers = Set(productIdentifiers)
-        self.iapProducts = []
-        
-    }
     
     /// Initiates a purchase for the product.
     /// - Parameter id: The identifier of the product to be purchased.
@@ -101,13 +91,17 @@ final public class InAppModernService {
     }
     
     /// Fetches the available in-app products from the App Store.
-    /// - Returns: An array of products matching the configured identifiers.
-    public func fetchAvailableProducts() async throws -> [any InAppProductProtocol] {
-        guard !productIdentifiers.isEmpty else {
+    /// - Parameter productIdentifiers: The product identifiers to fetch.
+    /// - Returns: An array of products matching the provided identifiers.
+    public func fetchAvailableProducts(
+        productIdentifiers: [String]
+    ) async throws -> [any InAppProductProtocol] {
+        let identifiers = Set(productIdentifiers)
+        guard !identifiers.isEmpty else {
             throw InAppStoreKitError.productsListEmpty
         }
         
-        let products = try await Product.products(for: productIdentifiers)
+        let products = try await Product.products(for: identifiers)
         self.iapProducts = products
         
         return products
