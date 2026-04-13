@@ -21,10 +21,12 @@ final public class InAppLegacyService: NSObject {
     public private(set) var productIdentifiers: Set<String> = []
     public var iapProducts: [SKProduct] {
         get { productsFetchQueue.sync { _iapProducts } }
-        set { productsFetchQueue.async(flags: .barrier) { self._iapProducts = newValue } }
+        set { productsFetchQueue.sync(flags: .barrier) { self._iapProducts = newValue } }
     }
     
     private var restoredProductIDs: [String] = []
+    public private(set) var isPurchaseInProgress = false
+    public private(set) var isRestoreInProgress = false
     
     // MARK: - Callbacks
     public var productDidSuccessPurchased: ((String) -> Void)?
@@ -58,6 +60,12 @@ final public class InAppLegacyService: NSObject {
     /// Initiates a purchase for the product with the given identifier.
     /// - Parameter id: The identifier of the product to be purchased.
     public func purchaseMyProduct(id: String) {
+        guard !isPurchaseInProgress else {
+            DispatchQueue.main.async {
+                self.productDidFailedPurchased?(InAppStoreKitError.pending)
+            }
+            return
+        }
         guard !iapProducts.isEmpty else {
             DispatchQueue.main.async {
                 self.productDidFailedPurchased?(InAppStoreKitError.productsNotFetched)
@@ -78,18 +86,26 @@ final public class InAppLegacyService: NSObject {
             return
         }
         
+        isPurchaseInProgress = true
         let payment = SKPayment(product: product)
         SKPaymentQueue.default().add(payment)
     }
     
     /// Restores previously completed purchases.
     public func restorePurchase() {
+        guard !isRestoreInProgress else {
+            DispatchQueue.main.async {
+                self.productDidFailedRestored?(InAppStoreKitError.pending)
+            }
+            return
+        }
         guard canMakePurchases() else {
             DispatchQueue.main.async {
                 self.productDidFailedRestored?(InAppStoreKitError.userCantMakePayments)
             }
             return
         }
+        isRestoreInProgress = true
         self.restoredProductIDs = []
         
         SKPaymentQueue.default().restoreCompletedTransactions()
@@ -153,6 +169,7 @@ extension InAppLegacyService: SKProductsRequestDelegate, SKPaymentTransactionObs
             switch transaction.transactionState {
             case .purchased:
                 SKPaymentQueue.default().finishTransaction(transaction)
+                isPurchaseInProgress = false
                 
                 DispatchQueue.main.async {
                     self.productDidSuccessPurchased?(productId)
@@ -163,6 +180,7 @@ extension InAppLegacyService: SKProductsRequestDelegate, SKPaymentTransactionObs
                 self.restoredProductIDs.append(productId)
             case .failed:
                 SKPaymentQueue.default().finishTransaction(transaction)
+                isPurchaseInProgress = false
                 DispatchQueue.main.async {
                     if let skError = transaction.error as? SKError,
                        skError.code == .paymentCancelled {
@@ -172,6 +190,7 @@ extension InAppLegacyService: SKProductsRequestDelegate, SKPaymentTransactionObs
                     }
                 }
             case .deferred:  // Ask to Buy
+                isPurchaseInProgress = false
                 DispatchQueue.main.async {
                     self.productDidFailedPurchased?(InAppStoreKitError.pending)
                 }
@@ -186,6 +205,7 @@ extension InAppLegacyService: SKProductsRequestDelegate, SKPaymentTransactionObs
     public func paymentQueueRestoreCompletedTransactionsFinished(_ queue: SKPaymentQueue) {
         let ids = self.restoredProductIDs
         self.restoredProductIDs = []
+        isRestoreInProgress = false
         
         DispatchQueue.main.async {
             if ids.isEmpty {
@@ -204,6 +224,7 @@ extension InAppLegacyService: SKProductsRequestDelegate, SKPaymentTransactionObs
         _ queue: SKPaymentQueue, restoreCompletedTransactionsFailedWithError error: Error
     ) {
         self.restoredProductIDs = []
+        isRestoreInProgress = false
         
         DispatchQueue.main.async {
             self.productDidFailedRestored?(error)

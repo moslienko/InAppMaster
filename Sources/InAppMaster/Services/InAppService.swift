@@ -84,6 +84,10 @@ final public class InAppService {
                 }
             }
         } else {
+            guard !legacyService.isPurchaseInProgress else {
+                completion(.failure(InAppStoreKitError.pending))
+                return
+            }
             legacyService.productDidSuccessPurchased = { id in
                 completion(.success(id))
             }
@@ -107,6 +111,10 @@ final public class InAppService {
                 }
             }
         } else {
+            guard !legacyService.isRestoreInProgress else {
+                completion(.failure(InAppStoreKitError.pending))
+                return
+            }
             legacyService.productDidSuccessRestored = { ids in
                 completion(.success(ids))
             }
