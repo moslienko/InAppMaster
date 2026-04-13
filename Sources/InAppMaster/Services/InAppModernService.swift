@@ -106,7 +106,7 @@ final public class InAppModernService {
     /**
      Запрос к доступным продуктам
      **/
-    public func fetchAvailableProducts() async throws -> [Product] {
+    public func fetchAvailableProducts() async throws -> [any InAppProductProtocol] {
         guard !productIdentifiers.isEmpty else {
             throw InAppStoreKitError.productsListEmpty
         }
@@ -145,12 +145,10 @@ final public class InAppModernService {
      **/
     public func getCurrentActiveSubscriptionJWS() async -> String? {
         for await result in Transaction.currentEntitlements {
-            if case .verified(let transaction) = result {
-                if transaction.revocationDate == nil &&
-                    (transaction.expirationDate == nil || transaction.expirationDate! > Date()) {
-                    let jwsData = transaction.jsonRepresentation
-                    return String(data: jwsData, encoding: .utf8)
-                }
+            if case .verified(let transaction) = result,
+               transaction.revocationDate == nil,
+               (transaction.expirationDate ?? .distantFuture) > Date() {
+                return result.jwsRepresentation
             }
         }
         return nil

@@ -8,22 +8,22 @@
 import StoreKit
 
 final public class InAppService {
-    
+
     // MARK: - Params
     static public let shared = InAppService()
-    
+
     // iOS 13-14
-    public let legacyService = InAppLegacyService.shared
+    public lazy var legacyService = InAppLegacyService.shared
     // iOS 15+
     @available(iOS 15.0, *)
     @MainActor
     public var modernService: InAppModernService {
         InAppModernService.shared
     }
-    
+
     // MARK: - Init
-    private init() { }
-    
+    private init() {}
+
     // MARK: - Methods
     public func configure(productIdentifiers: [String]) {
         if #available(iOS 15.0, *) {
@@ -34,8 +34,10 @@ final public class InAppService {
             legacyService.configure(productIdentifiers: productIdentifiers)
         }
     }
-    
-    public func fetchProducts(completion: @escaping (Result<[any InAppProductProtocol], Error>) -> Void) {
+
+    public func fetchProducts(
+        completion: @escaping (Result<[any InAppProductProtocol], Error>) -> Void
+    ) {
         if #available(iOS 15.0, *) {
             Task {
                 do {
@@ -43,8 +45,7 @@ final public class InAppService {
                     await MainActor.run {
                         completion(.success(products))
                     }
-                }
-                catch {
+                } catch {
                     await MainActor.run {
                         completion(.failure(error))
                     }
@@ -54,18 +55,20 @@ final public class InAppService {
             legacyService.productsInfoRequestDidFinished = { products in
                 completion(.success(products))
             }
+            legacyService.productsFetchDidFailed = { error in
+                completion(.failure(error))
+            }
             legacyService.fetchAvailableProducts()
         }
     }
-    
+
     public func purchaseProduct(id: String, completion: @escaping (Result<String, Error>) -> Void) {
         if #available(iOS 15.0, *) {
             Task {
                 do {
                     try await modernService.purchaseMyProduct(id: id)
                     completion(.success(id))
-                }
-                catch {
+                } catch {
                     completion(.failure(error))
                 }
             }
@@ -79,15 +82,14 @@ final public class InAppService {
             legacyService.purchaseMyProduct(id: id)
         }
     }
-    
-    public func restoreProducts(id: String, completion: @escaping (Result<[String], Error>) -> Void) {
+
+    public func restoreProducts(completion: @escaping (Result<[String], Error>) -> Void) {
         if #available(iOS 15.0, *) {
             Task {
                 do {
                     let purchasedProducts = try await modernService.restorePurchase()
                     completion(.success(Array(purchasedProducts)))
-                }
-                catch {
+                } catch {
                     completion(.failure(error))
                 }
             }
@@ -101,19 +103,21 @@ final public class InAppService {
             legacyService.restorePurchase()
         }
     }
-    
+
+    @available(iOS, deprecated: 15.0, message: "Use getCurrentActiveSubscriptionJWS in InAppModernService on iOS 15+")
     public func getReceiptData() -> Result<Data, Error> {
         guard let receiptURL = Bundle.main.appStoreReceiptURL,
-              FileManager.default.fileExists(atPath: receiptURL.path) else {
+            FileManager.default.fileExists(atPath: receiptURL.path)
+        else {
             return .failure(InAppStoreKitError.receiptNotFoundNeedRefresh)
         }
-        
+
         do {
-            let receiptData = try Data(contentsOf: receiptURL, options: Data.ReadingOptions.alwaysMapped)
+            let receiptData = try Data(
+                contentsOf: receiptURL, options: Data.ReadingOptions.alwaysMapped)
             return .success(receiptData)
         } catch {
             return .failure(error)
         }
     }
 }
-
