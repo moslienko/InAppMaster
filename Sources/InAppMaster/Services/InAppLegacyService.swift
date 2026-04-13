@@ -161,7 +161,12 @@ extension InAppLegacyService: SKProductsRequestDelegate, SKPaymentTransactionObs
             case .failed:
                 SKPaymentQueue.default().finishTransaction(transaction)
                 DispatchQueue.main.async {
-                    self.productDidFailedPurchased?(transaction.error ?? InAppStoreKitError.unknown)
+                    if let skError = transaction.error as? SKError,
+                       skError.code == .paymentCancelled {
+                        self.productDidFailedPurchased?(InAppStoreKitError.userCancelled)
+                    } else {
+                        self.productDidFailedPurchased?(transaction.error ?? InAppStoreKitError.unknown)
+                    }
                 }
             case .deferred:  // Ask to Buy
                 DispatchQueue.main.async {
