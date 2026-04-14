@@ -13,7 +13,7 @@ import StoreKit
 final public class InAppModernService {
     
     // MARK: - Params
-    static public let shared = InAppModernService()
+    static let shared = InAppModernService()
     
     private var iapProducts = [Product]()
     private var updatesTask: Task<Void, Never>?
@@ -42,7 +42,7 @@ final public class InAppModernService {
     
     /// Initiates a purchase for the product.
     /// - Parameter id: The identifier of the product to be purchased.
-    public func purchaseMyProduct(id: String) async throws {
+    func purchaseMyProduct(id: String) async throws {
         guard !iapProducts.isEmpty else {
             throw InAppStoreKitError.productsNotFetched
         }
@@ -72,7 +72,7 @@ final public class InAppModernService {
     
     /// Restores previously purchased products.
     /// - Returns: A set of product identifiers for currently active purchases.
-    public func restorePurchase() async throws -> Set<String> {
+    func restorePurchase() async throws -> Set<String> {
         var purchasedProductIDs: Set<String> = []
         
         try await AppStore.sync()
@@ -93,7 +93,7 @@ final public class InAppModernService {
     /// Fetches the available in-app products from the App Store.
     /// - Parameter productIdentifiers: The product identifiers to fetch.
     /// - Returns: An array of products matching the provided identifiers.
-    public func fetchAvailableProducts(
+    func fetchAvailableProducts(
         productIdentifiers: [String]
     ) async throws -> [any InAppProductProtocol] {
         let identifiers = Set(productIdentifiers)
@@ -105,25 +105,6 @@ final public class InAppModernService {
         self.iapProducts = products
         
         return products
-    }
-    
-    /// Returns the App Store product.
-    /// - Parameter id: The identifier of the product.
-    /// - Returns: The matching App Store product, or `nil` if not found.
-    public func getProduct(id: String) -> Product? {
-        iapProducts.first(where: { $0.id == id })
-    }
-    
-    /// Refreshes the App Store receipt if it is missing from the bundle.
-    public func refreshReceiptIfNeeded() async throws {
-        guard let receiptURL = Bundle.main.appStoreReceiptURL else {
-            try await InAppRefreshReceiptService.shared.refreshReceipt()
-            return
-        }
-        
-        if !FileManager.default.fileExists(atPath: receiptURL.path) {
-            try await InAppRefreshReceiptService.shared.refreshReceipt()
-        }
     }
     
     /// Returns the JWS representation of the currently active subscription.

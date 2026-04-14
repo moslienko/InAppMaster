@@ -14,7 +14,7 @@ final public class InAppService {
     private var configuredProductIdentifiers: [String] = []
     
     /// iOS 13-14
-    public lazy var legacyService = InAppLegacyService.shared
+    private lazy var legacyService = InAppLegacyService.shared
     
     /// iOS 15+
     @available(iOS 15.0, *)
