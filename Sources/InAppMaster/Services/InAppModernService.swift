@@ -43,12 +43,7 @@ final public class InAppModernService {
     /// Initiates a purchase for the product.
     /// - Parameter id: The identifier of the product to be purchased.
     func purchaseMyProduct(id: String) async throws {
-        guard !iapProducts.isEmpty else {
-            throw InAppStoreKitError.productsNotFetched
-        }
-        guard let product = iapProducts.first(where: { $0.id == id }) else {
-            throw InAppStoreKitError.unknownProductId
-        }
+        let product = try await cachedOrFetchedProduct(id: id)
         
         let result = try await product.purchase()
         
@@ -102,7 +97,7 @@ final public class InAppModernService {
         }
         
         let products = try await Product.products(for: identifiers)
-        self.iapProducts = products
+        mergeIntoCache(products)
         
         return products
     }
@@ -118,5 +113,44 @@ final public class InAppModernService {
             }
         }
         return nil
+    }
+}
+
+// MARK: - Helpers
+@available(iOS 15.0, *)
+private extension InAppModernService {
+    
+    /// Returns the product from the cache or loads it from the App Store.
+    /// - Parameter id: The identifier of the product.
+    /// - Returns: The product matching the provided identifier.
+    func cachedOrFetchedProduct(id: String) async throws -> Product {
+        if let product = iapProducts.first(where: { $0.id == id }) {
+            return product
+        }
+        
+        let products = try await Product.products(for: [id])
+        mergeIntoCache(products)
+        
+        // Store is unavailable
+        guard !iapProducts.isEmpty else {
+            throw InAppStoreKitError.productsNotFetched
+        }
+        guard let product = iapProducts.first(where: { $0.id == id }) else {
+            throw InAppStoreKitError.unknownProductId
+        }
+        
+        return product
+    }
+    
+    /// Adds the products to the cache without removing already loaded ones.
+    /// - Parameter products: The products to be added.
+    func mergeIntoCache(_ products: [Product]) {
+        for product in products {
+            if let index = iapProducts.firstIndex(where: { $0.id == product.id }) {
+                iapProducts[index] = product
+            } else {
+                iapProducts.append(product)
+            }
+        }
     }
 }

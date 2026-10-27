@@ -24,6 +24,9 @@ final class InAppLegacyService: NSObject {
         set { productsFetchQueue.sync(flags: .barrier) { self._iapProducts = newValue } }
     }
     
+    private var purchaseProductRequest: SKProductsRequest?
+    private var pendingPurchaseProductId: String?
+    
     private var restoredProductIDs: [String] = []
     private(set) var isPurchaseInProgress = false
     private(set) var isRestoreInProgress = false
@@ -66,19 +69,6 @@ final class InAppLegacyService: NSObject {
             }
             return
         }
-        guard !iapProducts.isEmpty else {
-            DispatchQueue.main.async {
-                self.productDidFailedPurchased?(InAppStoreKitError.productsNotFetched)
-            }
-            return
-        }
-        guard let product = iapProducts.first(where: { $0.productIdentifier == id }) else {
-            DispatchQueue.main.async {
-                self.productDidFailedPurchased?(InAppStoreKitError.unknownProductId)
-            }
-            return
-        }
-        
         guard canMakePurchases() else {
             DispatchQueue.main.async {
                 self.productDidFailedPurchased?(InAppStoreKitError.userCantMakePayments)
@@ -86,9 +76,11 @@ final class InAppLegacyService: NSObject {
             return
         }
         
-        isPurchaseInProgress = true
-        let payment = SKPayment(product: product)
-        SKPaymentQueue.default().add(payment)
+        if let product = iapProducts.first(where: { $0.productIdentifier == id }) {
+            startPayment(for: product)
+        } else {
+            fetchProductForPurchase(id: id)
+        }
     }
     
     /// Restores previously completed purchases.
@@ -129,12 +121,17 @@ extension InAppLegacyService: SKProductsRequestDelegate, SKPaymentTransactionObs
     func productsRequest(
         _ request: SKProductsRequest, didReceive response: SKProductsResponse
     ) {
+        if request === purchaseProductRequest {
+            handlePurchaseProductResponse(response.products)
+            return
+        }
+        
         if response.products.isEmpty {
             DispatchQueue.main.async {
                 self.productsFetchDidFailed?(InAppStoreKitError.productsListEmpty)
             }
         } else {
-            iapProducts = response.products
+            mergeIntoCache(response.products)
             DispatchQueue.main.async {
                 self.productsInfoRequestDidFinished?(response.products)
             }
@@ -231,8 +228,78 @@ extension InAppLegacyService: SKProductsRequestDelegate, SKPaymentTransactionObs
     ///   - request: The request that failed.
     ///   - error: The error describing the failure.
     func request(_ request: SKRequest, didFailWithError error: any Error) {
+        if request === purchaseProductRequest {
+            handlePurchaseProductResponse([])
+            return
+        }
+        
         DispatchQueue.main.async {
             self.productsFetchDidFailed?(error)
+        }
+    }
+}
+
+// MARK: - Helpers
+private extension InAppLegacyService {
+    
+    /// Adds the payment for the product to the payment queue.
+    /// - Parameter product: The product to be purchased.
+    func startPayment(for product: SKProduct) {
+        isPurchaseInProgress = true
+        let payment = SKPayment(product: product)
+        SKPaymentQueue.default().add(payment)
+    }
+    
+    /// Loads the product from the App Store before the purchase.
+    /// - Parameter id: The identifier of the product to be purchased.
+    func fetchProductForPurchase(id: String) {
+        isPurchaseInProgress = true
+        pendingPurchaseProductId = id
+        
+        let request = SKProductsRequest(productIdentifiers: [id])
+        request.delegate = self
+        purchaseProductRequest = request
+        request.start()
+    }
+    
+    /// Handles the App Store response for the product requested before the purchase.
+    /// - Parameter products: The products received from the App Store.
+    func handlePurchaseProductResponse(_ products: [SKProduct]) {
+        let id = pendingPurchaseProductId
+        purchaseProductRequest = nil
+        pendingPurchaseProductId = nil
+        mergeIntoCache(products)
+        
+        // Store is unavailable
+        guard !iapProducts.isEmpty else {
+            isPurchaseInProgress = false
+            DispatchQueue.main.async {
+                self.productDidFailedPurchased?(InAppStoreKitError.productsNotFetched)
+            }
+            return
+        }
+        guard let product = iapProducts.first(where: { $0.productIdentifier == id }) else {
+            isPurchaseInProgress = false
+            DispatchQueue.main.async {
+                self.productDidFailedPurchased?(InAppStoreKitError.unknownProductId)
+            }
+            return
+        }
+        
+        startPayment(for: product)
+    }
+    
+    /// Adds the products to the cache without removing already loaded ones.
+    /// - Parameter products: The products to be added.
+    func mergeIntoCache(_ products: [SKProduct]) {
+        productsFetchQueue.sync(flags: .barrier) {
+            for product in products {
+                if let index = self._iapProducts.firstIndex(where: { $0.productIdentifier == product.productIdentifier }) {
+                    self._iapProducts[index] = product
+                } else {
+                    self._iapProducts.append(product)
+                }
+            }
         }
     }
 }
